@@ -71,7 +71,7 @@ def evaluate(config, ckpt_path, testing_chunked_samples_file, training_stats_pat
 
     #  get training stats
     if training_stats_path is not None:
-        training_scores_stats = torch.load(training_stats_path)
+        training_scores_stats = torch.load(training_stats_path, weights_only=False)
 
         of_mean, of_std = np.mean(training_scores_stats["of_training_stats"]), \
                           np.std(training_scores_stats["of_training_stats"])
