@@ -17,7 +17,7 @@ model_paras:
   skip_ops: [ "none", "concat", "concat" ]
 
 device: cuda:0
-dataset_base_dir: ./data
+dataset_base_dir: ./dummy
 dataset_name: ped2
 exp_name: ped2_ML_MemAE_SC_CVAE
 ckpt_root: ./ckpt
@@ -34,7 +34,7 @@ logevery: 100
 saveevery: 1
 
 # training setting
-num_epochs: 80
+num_epochs: 10
 batchsize: 128
 lr: 0.0001
 num_workers: 8
