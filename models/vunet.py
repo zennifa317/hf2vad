@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import ModuleDict, ModuleList, Conv2d
 import numpy as np
-from edflow.util import retrieve
+#from edflow.util import retrieve
 from models.basic_modules import (
     VUnetResnetBlock,
     Upsample,
@@ -356,17 +356,30 @@ class VUnet(nn.Module):
 
         self.config = config
 
-        final_act = retrieve(config, "model_paras/final_act", default=False)
-        nf_max = retrieve(config, "model_paras/nf_max", default=128)
-        nf_start = retrieve(config, "model_paras/nf_start", default=64)
-        spatial_size = retrieve(config, "model_paras/spatial_size", default=256)
-        dropout_prob = retrieve(config, "model_paras/dropout_prob", default=0.1)
-        img_channels = retrieve(config, "model_paras/img_channels", default=3)
-        motion_channels = retrieve(config, "model_paras/motion_channels", default=2)
-        clip_hist = retrieve(config, "model_paras/clip_hist", default=4)
-        clip_pred = retrieve(config, "model_paras/clip_pred", default=1)
-        num_flows = retrieve(config, "model_paras/num_flows", default=4)
-        device = retrieve(config, "device", default="cuda:0")
+        # final_act = retrieve(config, "model_paras/final_act", default=False)
+        # nf_max = retrieve(config, "model_paras/nf_max", default=128)
+        # nf_start = retrieve(config, "model_paras/nf_start", default=64)
+        # spatial_size = retrieve(config, "model_paras/spatial_size", default=256)
+        # dropout_prob = retrieve(config, "model_paras/dropout_prob", default=0.1)
+        # img_channels = retrieve(config, "model_paras/img_channels", default=3)
+        # motion_channels = retrieve(config, "model_paras/motion_channels", default=2)
+        # clip_hist = retrieve(config, "model_paras/clip_hist", default=4)
+        # clip_pred = retrieve(config, "model_paras/clip_pred", default=1)
+        # num_flows = retrieve(config, "model_paras/num_flows", default=4)
+        # device = retrieve(config, "device", default="cuda:0")
+
+        final_act = config["model_paras"]["final_act"]
+        nf_max = config["model_paras"]["nf_max"]
+        nf_start = config["model_paras"]["nf_start"]
+        spatial_size = config["model_paras"]["spatial_size"]
+        dropout_prob = config["model_paras"]["dropout_prob"]
+        img_channels = config["model_paras"]["img_channels"]
+        motion_channels = config["model_paras"]["motion_channels"]
+        clip_hist = config["model_paras"]["clip_hist"]
+        clip_pred = config["model_paras"]["clip_pred"]
+        num_flows = config["model_paras"]["num_flows"]
+        device = config["device"]
+
         output_channels = img_channels * clip_pred
 
         # define required parameters
