@@ -1,0 +1,1 @@
+python detect.py --img '/home/yukinori-okamura/ダウンロード/abbey-road-594684.jpg'
