@@ -5,6 +5,7 @@ import os
 
 import torch
 from torchvision.transforms import v2
+from torchvision.models.detection import retinanet_resnet50_fpn_v2, RetinaNet_ResNet50_FPN_V2_Weights
 from torchvision.utils import draw_bounding_boxes
 from PIL import Image
 
@@ -40,7 +41,14 @@ def detect(img_path, weights_path=None, num_classes=None, score_threshold=0.8):
         img = Image.open(path)
         imgs.append(img)
 
-    model = load_modelAndWeights(weights=weights_path).to(device)
+    if weights_path is None:
+        weights = RetinaNet_ResNet50_FPN_V2_Weights.DEFAULT
+        model = retinanet_resnet50_fpn_v2(weights=weights)
+    else:
+        model = retinanet_resnet50_fpn_v2(weights=None, num_classes=num_classes)
+        model.load_state_dict(torch.load(weights_path))
+    
+    model.to(device=device)
     model.eval()
 
     input_imgs = [transform(img).to(device) for img in imgs]
@@ -80,4 +88,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    detect(img_path=args.img, weights_path=args.weights, num_classes=args.num_classes, score_threshold=args.score_threshold)
+    img_path=args.img
+    weights_path=args.weights
+    num_classes=args.num_classes
+    score_threshold=args.score_threshold
+
+    detect(img_path, weights_path, num_classes, score_threshold)
