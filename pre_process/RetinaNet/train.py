@@ -8,11 +8,18 @@ from dataset import CustomImageDataset
 
 def train_loop(model, dataloder, device, optimizer):
     model.train()
+    total_sum_loss = 0
+    total_cls_loss = 0
+    total_breg_loss = 0
 
-    for batch, input_data in enumerate(dataloder):
-        input_data.to(device)
+    for input_data in dataloder:
+        images = input_data['image']
+        targets = input_data['target']
 
-        losses = model(input_data)
+        images = [ t.to(device) for t in images]
+        targets = [ {'boxes':d['boxes'].to(device), 'labels':d['labels'].to(device)} for d in targets]
+
+        losses = model(images=images, targets=targets)
         cls_loss = losses['classification_loss']
         breg_loss = losses['bbox_regression']
         sum_loss = cls_loss + breg_loss
@@ -20,21 +27,50 @@ def train_loop(model, dataloder, device, optimizer):
         optimizer.zero_grad()
         sum_loss.backward()
         optimizer.step()
+
+        total_sum_loss += sum_loss
+        total_cls_loss += cls_loss
+        total_breg_loss += breg_loss
     
-    return sum_loss, cls_loss, breg_loss
+    steps = len(dataloder)
+    ave_sum_loss = total_sum_loss / steps
+    ave_cls_loss = total_cls_loss / steps
+    ave_breg_loss = total_breg_loss / steps
+
+    train_loss_collection = {'sum_loss':ave_sum_loss, 'cls_loss':ave_cls_loss, 'breg_loss':ave_breg_loss}
+    
+    return train_loss_collection
 
 def eval_loop(model, dataloder, device):
     model.train()
+    total_sum_loss = 0
+    total_cls_loss = 0
+    total_breg_loss = 0
 
-    with torch.no_grad():
-        for batch, input_data in enumerate(dataloder):
-            input_data.to(device)
+    for input_data in dataloder:
+        images = input_data['image']
+        targets = input_data['target']
 
-            losses = model(input_data)
-            cls_loss = losses['classification_loss']
-            breg_loss = losses['bbox_regression']
-            sum_loss = cls_loss + breg_loss
+        images = [ t.to(device) for t in images]
+        targets = [ {'boxes':d['boxes'].to(device), 'labels':d['labels'].to(device)} for d in targets]
 
+        losses = model(images=images, targets=targets)
+        cls_loss = losses['classification_loss']
+        breg_loss = losses['bbox_regression']
+        sum_loss = cls_loss + breg_loss
+
+        total_sum_loss += sum_loss
+        total_cls_loss += cls_loss
+        total_breg_loss += breg_loss
+    
+    steps = len(dataloder)
+    ave_sum_loss = total_sum_loss / steps
+    ave_cls_loss = total_cls_loss / steps
+    ave_breg_loss = total_breg_loss / steps
+    
+    valid_loss_collection = {'sum_loss':ave_sum_loss, 'cls_loss':ave_cls_loss, 'breg_loss':ave_breg_loss}
+    
+    return valid_loss_collection
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -49,6 +85,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr','--learning_rate', type=float, default=0.001)
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight_decay', type=float, default=0.01)
+    parser.add_argument('--freeze_backbone', action='store_true')
 
     args = parser.parse_args()
 
@@ -62,6 +99,7 @@ if __name__ == "__main__":
     lr = args.lr
     momentum = args.momentum
     weight_decay = args.weight_decay
+    fb = args.freeze_backbone
 
     if pre_trained:
         weights = RetinaNet_ResNet50_FPN_V2_Weights.DEFAULT
@@ -78,10 +116,11 @@ if __name__ == "__main__":
         model.head.classification_head.cls_logits = new_cls_logits
         model.head.classification_head.num_classes = num_classes
 
-        print("--- バックボーンのパラメータを凍結 ---")
-        for param in model.backbone.parameters():
-            param.requires_grad = False
-        print("凍結完了！\n")
+        if fb:
+            print("--- バックボーンのパラメータを凍結 ---")
+            for param in model.backbone.parameters():
+                param.requires_grad = False
+            print("凍結完了！\n")
     
     else:
         model = retinanet_resnet50_fpn_v2(num_classes=num_classes)
@@ -105,7 +144,12 @@ if __name__ == "__main__":
     }
 
     for epoch in range(max_epochs):
-        train_total_loss, train_cls_loss, train_breg_loss = train_loop(model=model, device=device, optimizer=optimizer)
-        loss_history['train']['total_loss'].append(train_total_loss)
-        loss_history['train']['cls_loss'].append(train_cls_loss)
-        loss_history['train']['reg_loss'].append(train_breg_loss)
+        train_losses = train_loop(model=model, dataloder=train_dataloder, device=device, optimizer=optimizer)
+        loss_history['train']['total_loss'].append(train_losses['sum_loss'])
+        loss_history['train']['cls_loss'].append(train_losses['cls_loss'])
+        loss_history['train']['reg_loss'].append(train_losses['breg_loss'])
+
+        valid_losses = eval_loop(model=model, dataloder=valid_dataloder, device=device)
+        loss_history['valid']['total_loss'].append(valid_losses['sum_loss'])
+        loss_history['valid']['cls_loss'].append(valid_losses['cls_loss'])
+        loss_history['valid']['reg_loss'].append(valid_losses['breg_loss'])
