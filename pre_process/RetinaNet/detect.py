@@ -9,8 +9,6 @@ from torchvision.models.detection import retinanet_resnet50_fpn_v2, RetinaNet_Re
 from torchvision.utils import draw_bounding_boxes
 from PIL import Image
 
-from RetinaNet import load_modelAndWeights
-
 def detect(img_path, weights_path=None, num_classes=None, score_threshold=0.8):
     if not os.path.exists('detect'):
         os.mkdir('detect') 
