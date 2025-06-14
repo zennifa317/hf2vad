@@ -74,18 +74,17 @@ def plot_result(output_dir, max_epochs, loss_history):
 
     y = range(1, max_epochs+1)
 
-    train_total_loss = loss_history['train']['sum_loss']
-    valid_total_loss = loss_history['valid']['sum_loss']
+    train_total_loss = loss_history['train']['total_loss']
+    valid_total_loss = loss_history['valid']['total_loss']
     total_loss.plot(train_total_loss, y, label='Train')
     total_loss.plot(valid_total_loss, y, label='Valid')
     total_loss.set_title('Total Loss')
     total_loss.set_xlabel('Epochs')
     total_loss.set_ylabel('Loss')
-    total_loss.legend(['sin(x)', 'cos(x)'])
     total_loss.legend()
 
-    train_cls_loss = loss_history['train']['cls_loss']
-    valid_cls_loss = loss_history['valid']['cls_loss']
+    train_cls_loss = loss_history['train']['classification_loss']
+    valid_cls_loss = loss_history['valid']['classification_loss']
     cls_loss.plot(train_cls_loss, y, label='Train')
     cls_loss.plot(valid_cls_loss, y, label='Valid')
     cls_loss.set_title('Classification Loss')
@@ -93,8 +92,8 @@ def plot_result(output_dir, max_epochs, loss_history):
     cls_loss.set_ylabel('Loss')
     cls_loss.legend()
 
-    train_breg_loss = loss_history['train']['breg_loss']
-    valid_breg_loss = loss_history['valid']['breg_loss']
+    train_breg_loss = loss_history['train']['regression_loss']
+    valid_breg_loss = loss_history['valid']['regression_loss']
     breg_loss.plot(train_breg_loss, y, label='Train')
     breg_loss.plot(valid_breg_loss, y, label='Valid')
     breg_loss.set_title('Bounding Box Regression Loss')
@@ -125,7 +124,7 @@ if __name__ == "__main__":
 
     data_dir = args.data_dir
     output_dir = args.output_dir
-    pre_trained = args.pre_tained
+    pre_trained = args.pre_trained
     num_classes = args.num_classes
     device = args.device
     max_epochs = args.epochs
@@ -140,10 +139,9 @@ if __name__ == "__main__":
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
-    if device == 'cuda':
-        if torch.cuda.is_available():
-            device = 'cpu'
-            print('CUDAが使えないので、CPUを使用します')
+    if device == 'cuda' and not torch.cuda.is_available():
+        device = 'cpu'
+        print('CUDAが使えないので、CPUを使用します')
     print(f'Using device : {device}')
 
     if pre_trained:
@@ -177,7 +175,7 @@ if __name__ == "__main__":
     valid_dataset = CustomImageDataset()
     
     train_dataloder = DataLoader(dataset=train_dataset, batch_size=train_batch_size, shuffle=True, collate_fn=collate_fn)
-    valid_dataloder = DataLoader(dataset=valid_dataset, batch_size=valid_batch_size, shuffle=True, collate_fn=collate_fn)
+    valid_dataloder = DataLoader(dataset=valid_dataset, batch_size=valid_batch_size, shuffle=False, collate_fn=collate_fn)
 
     if optimizer_type == 'SGD':
         optimizer = torch.optim.SGD(params, lr=lr, momentum=momentum, weight_decay=weight_decay)
@@ -185,8 +183,8 @@ if __name__ == "__main__":
         optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
     loss_history = {
-    'train': {'total_loss': [], 'cls_loss': [], 'reg_loss': []},
-    'valid': {'total_loss': [], 'cls_loss': [], 'reg_loss': []}
+    'train': {'total_loss': [], 'classification_loss': [], 'regression_loss': []},
+    'valid': {'total_loss': [], 'classification_loss': [], 'regression_loss': []}
     }
 
     best_valid_loss = float('inf')
@@ -203,8 +201,8 @@ if __name__ == "__main__":
         loss_history['valid']['reg_loss'].append(valid_losses['breg_loss'])
 
         print(f'Epoch {epoch+1}/{max_epochs}----------------------------------\n'
-              f'Train Loss | Total Loss: {train_losses['sum_loss']:.4f} Cls Loss: {train_losses['cls_loss']:.4f} Breg Loss: {train_losses['breg_loss']:.4f}\n'
-              f'Valid Loss | Total Loss: {valid_losses['sum_loss']:.4f} Cls Loss: {valid_losses['cls_loss']:.4f} Breg Loss: {valid_losses['breg_loss']:.4f}')
+              f'Train Loss | Total Loss: {train_losses['total']:.4f} Cls Loss: {train_losses['classification']:.4f} Breg Loss: {train_losses['regression']:.4f}\n'
+              f'Valid Loss | Total Loss: {valid_losses['total']:.4f} Cls Loss: {valid_losses['classification']:.4f} Breg Loss: {valid_losses['regression']:.4f}')
 
         if valid_losses['total'] < best_valid_loss:
             best_valid_loss = valid_losses['total']
