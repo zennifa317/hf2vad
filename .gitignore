@@ -16,6 +16,8 @@ pre_process/flownet_networks/resample2d_package/build/
 pre_process/flownet_networks/resample2d_package/resample2d_cuda.egg-info
 pre_process/flownet_networks/resample2d_package/dist
 
+pre_process/RetinaNet/.DS_Store
+
 
 pretrained_ckpts/
 
