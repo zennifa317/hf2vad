@@ -18,6 +18,7 @@ pre_process/flownet_networks/resample2d_package/dist
 
 pre_process/RetinaNet/.DS_Store
 pre_process/RetinaNet/data/
+pre_process/RetinaNet/outputs/
 
 
 pretrained_ckpts/
