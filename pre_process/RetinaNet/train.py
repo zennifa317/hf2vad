@@ -28,7 +28,7 @@ def cal_loss(model, images, targets):
 
 def train_loop(model, dataloder, device, optimizer):
     model.train()
-    epoch_losses = {'total': 0.0, 'classification': 0.0, 'regression': 0.0}
+    epoch_losses = {'total': 0.0, 'cls': 0.0, 'b_reg': 0.0}
 
     for images, targets in tqdm(dataloder):
         images = [ t.to(device) for t in images]
@@ -57,8 +57,8 @@ def train_loop(model, dataloder, device, optimizer):
         optimizer.step()
 
         epoch_losses['total'] += sum_loss
-        epoch_losses['classification'] += cls_loss
-        epoch_losses['regression'] += breg_loss
+        epoch_losses['cls'] += cls_loss
+        epoch_losses['b_reg'] += breg_loss
     
     steps = len(dataloder)
     for k in epoch_losses.keys():
@@ -67,7 +67,7 @@ def train_loop(model, dataloder, device, optimizer):
     return epoch_losses
 
 def valid_loop(model, dataloder, device):
-    epoch_losses = {'total': 0.0, 'classification': 0.0, 'regression': 0.0}
+    epoch_losses = {'total': 0.0, 'cls': 0.0, 'b_reg': 0.0}
     metric = MeanAveragePrecision(iou_type="bbox", extended_summary=True)
 
     with torch.no_grad():
@@ -95,8 +95,8 @@ def valid_loop(model, dataloder, device):
             sum_loss, cls_loss, breg_loss = cal_loss(model, images, targets)
 
             epoch_losses['total'] += sum_loss
-            epoch_losses['classification'] += cls_loss
-            epoch_losses['regression'] += breg_loss
+            epoch_losses['cls'] += cls_loss
+            epoch_losses['b_reg'] += breg_loss
             
             model.eval()
             images = [t.to(device) for t in images]
@@ -119,8 +119,8 @@ def plot_result(output_dir, max_epochs, loss_history):
 
     y = range(1, max_epochs+1)
 
-    train_total_loss = loss_history['train']['total_loss']
-    valid_total_loss = loss_history['valid']['total_loss']
+    train_total_loss = loss_history['train']['total']
+    valid_total_loss = loss_history['valid']['total']
     total_loss.plot(train_total_loss, y, label='Train')
     total_loss.plot(valid_total_loss, y, label='Valid')
     total_loss.set_title('Total Loss')
@@ -128,8 +128,8 @@ def plot_result(output_dir, max_epochs, loss_history):
     total_loss.set_ylabel('Loss')
     total_loss.legend()
 
-    train_cls_loss = loss_history['train']['classification']
-    valid_cls_loss = loss_history['valid']['classification']
+    train_cls_loss = loss_history['train']['cls']
+    valid_cls_loss = loss_history['valid']['cls']
     cls_loss.plot(train_cls_loss, y, label='Train')
     cls_loss.plot(valid_cls_loss, y, label='Valid')
     cls_loss.set_title('Classification Loss')
@@ -137,8 +137,8 @@ def plot_result(output_dir, max_epochs, loss_history):
     cls_loss.set_ylabel('Loss')
     cls_loss.legend()
 
-    train_breg_loss = loss_history['train']['regression']
-    valid_breg_loss = loss_history['valid']['regression']
+    train_breg_loss = loss_history['train']['b_reg']
+    valid_breg_loss = loss_history['valid']['b_reg']
     breg_loss.plot(train_breg_loss, y, label='Train')
     breg_loss.plot(valid_breg_loss, y, label='Valid')
     breg_loss.set_title('Bounding Box Regression Loss')
@@ -241,30 +241,36 @@ if __name__ == "__main__":
         optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
     loss_history = {
-    'train': {'total_loss': [], 'classification': [], 'regression': []},
-    'valid': {'total_loss': [], 'classification': [], 'regression': []}
+    'train': {'total': [], 'cls': [], 'b_reg': []},
+    'valid': {'total': [], 'cls': [], 'b_reg': []}
     }
 
     best_valid_loss = float('inf')
 
     for epoch in range(max_epochs):
         train_losses = train_loop(model=model, dataloder=train_dataloder, device=device, optimizer=optimizer)
-        loss_history['train']['total_loss'].append(train_losses['total'])
-        loss_history['train']['classification'].append(train_losses['classification'])
-        loss_history['train']['regression'].append(train_losses['regression'])
+        train_total_loss = train_losses['total'].to('cpu').detach().numpy().copy()
+        train_cls_loss = train_losses['cls'].to('cpu').detach().numpy().copy()
+        train_reg_loss = train_losses['b_reg'].to('cpu').detach().numpy().copy()
+        loss_history['train']['total'].append(train_total_loss)
+        loss_history['train']['cls'].append(train_cls_loss)
+        loss_history['train']['b_reg'].append(train_reg_loss)
 
         valid_losses, valid_eval = valid_loop(model=model, dataloder=valid_dataloder, device=device)
-        loss_history['valid']['total_loss'].append(valid_losses['total'])
-        loss_history['valid']['classification'].append(valid_losses['classification'])
-        loss_history['valid']['regression'].append(valid_losses['regression'])
+        valid_total_loss = valid_losses['total'].to('cpu').detach().numpy().copy()
+        valid_cls_loss = valid_losses['cls'].to('cpu').detach().numpy().copy()
+        valid_reg_loss = valid_losses['b_reg'].to('cpu').detach().numpy().copy()
+        loss_history['valid']['total'].append(valid_total_loss)
+        loss_history['valid']['cls'].append(valid_cls_loss)
+        loss_history['valid']['b_reg'].append(valid_reg_loss)
 
         print(f'Epoch {epoch+1}/{max_epochs}----------------------------------\n'
-              f"Train Loss | Total Loss: {train_losses['total']:.4f} Cls Loss: {train_losses['classification']:.4f} Breg Loss: {train_losses['regression']:.4f}\n"
-              f"Valid Loss | Total Loss: {valid_losses['total']:.4f} Cls Loss: {valid_losses['classification']:.4f} Breg Loss: {valid_losses['regression']:.4f}\n")
-        print(valid_eval)
+              f"Train Loss | Total Loss: {train_total_loss:.4f} Cls Loss: {train_cls_loss:.4f} Breg Loss: {train_reg_loss:.4f}\n"
+              f"Valid Loss | Total Loss: {valid_total_loss:.4f} Cls Loss: {valid_cls_loss:.4f} Breg Loss: {valid_reg_loss:.4f}\n")
+        #print(valid_eval)
 
-        if valid_losses['total'] < best_valid_loss:
-            best_valid_loss = valid_losses['total']
+        if valid_total_loss < best_valid_loss:
+            best_valid_loss = valid_total_loss
             model_path = os.path.join(output_dir, 'best_model.pth')
             torch.save(model.state_dict(), model_path)
     
