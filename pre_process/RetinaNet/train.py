@@ -4,22 +4,53 @@ import os
 import torch
 from torch.utils.data import DataLoader
 from torchvision.models.detection import retinanet_resnet50_fpn_v2, RetinaNet_ResNet50_FPN_V2_Weights
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from dataset import CustomImageDataset
+
+from torchvision.datasets import VOCDetection
+from torchvision.transforms import v2
+
+class_dict = {'aeroplane':1, 'bicycle':2, 'bird':3, 'boat':4, 'bottle':5,
+              'bus':6, 'car':7, 'cat': 8, 'chair':9, 'cow':10, 
+              'diningtable':11, 'dog':12, 'horse':13, 'motorbike':14, 'person':15,
+              'pottedplant':16, 'sheep':17, 'sofa':18, 'train':19, 'tvmonitor':20}
+
+def cal_loss(model, images, targets, device):
+    images = [ t.to(device) for t in images]
+    #targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels']} for d in targets ]
+    targets_list = []
+
+    for d in targets:
+        boxes = []
+        labels = []
+        for e in d['annotation']['object']:
+            box = torch.tensor(list(map(int, (e['bndbox']['xmin'],e['bndbox']['ymin'],e['bndbox']['xmax'],e['bndbox']['ymax']))))
+            label = torch.tensor([class_dict[e['name']]])
+            boxes.append(box)
+            labels.append(label)
+
+        tensor_boxes = torch.stack(boxes, dim=0)
+        tensor_labels = torch.cat(labels, dim=0)
+        targets_list.append({'boxes':tensor_boxes, 'labels':tensor_labels})
+    
+    targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels'].to(device)} for d in targets_list]
+
+    losses = model(images=images, targets=targets)
+    cls_loss = losses['classification']
+    breg_loss = losses['bbox_regression']
+    sum_loss = cls_loss + breg_loss
+
+    return sum_loss, cls_loss, breg_loss
 
 def train_loop(model, dataloder, device, optimizer):
     model.train()
     epoch_losses = {'total': 0.0, 'classification': 0.0, 'regression': 0.0}
 
-    for images, targets in dataloder:
-        images = [ t.to(device) for t in images]
-        targets = [ {'boxes':d['boxes'].to(device), 'labels':d['labels'].to(device)} for d in targets]
-
-        losses = model(images=images, targets=targets)
-        cls_loss = losses['classification_loss']
-        breg_loss = losses['bbox_regression']
-        sum_loss = cls_loss + breg_loss
+    for images, targets in tqdm(dataloder):
+        sum_loss, cls_loss, breg_loss = cal_loss(model, images, targets, device)
 
         optimizer.zero_grad()
         sum_loss.backward()
@@ -35,36 +66,31 @@ def train_loop(model, dataloder, device, optimizer):
     
     return epoch_losses
 
-def eval_loop(model, dataloder, device):
-    model.train()
+def valid_loop(model, dataloder, device):
     epoch_losses = {'total': 0.0, 'classification': 0.0, 'regression': 0.0}
+    metric = MeanAveragePrecision(iou_type="bbox", extended_summary=True)
 
     with torch.no_grad():
-        for images, targets in dataloder:
-            images = [ t.to(device) for t in images]
-            targets = [ {'boxes':d['boxes'].to(device), 'labels':d['labels'].to(device)} for d in targets]
-
-            losses = model(images=images, targets=targets)
-            cls_loss = losses['classification_loss']
-            breg_loss = losses['bbox_regression']
-            sum_loss = cls_loss + breg_loss
+        for images, targets in tqdm(dataloder):
+            model.train()
+            sum_loss, cls_loss, breg_loss = cal_loss(model, images, targets, device)
 
             epoch_losses['total'] += sum_loss
             epoch_losses['classification'] += cls_loss
             epoch_losses['regression'] += breg_loss
+
+            model.eval()
+            images = [t.to(device) for t in images]
+            preds = model(images)
+            metric.update(preds, targets)
     
     steps = len(dataloder)
     for k in epoch_losses.keys():
         epoch_losses[k] /= steps
-    
-    return epoch_losses
 
-def collate_fn(batch):
+    valid_eval = metric.compute()
     
-    images = [item['image'] for item in batch]
-    targets = [item['target'] for item in batch]
-    
-    return images, targets
+    return epoch_losses, valid_eval
 
 def plot_result(output_dir, max_epochs, loss_history):
     fig = plt.figure()
@@ -103,12 +129,22 @@ def plot_result(output_dir, max_epochs, loss_history):
 
     plt.savefig(os.path.join(output_dir, "Losses.png"))
 
+def collate_fn(batch):
+    return tuple(zip(*batch))
+
+# def collate_fn(batch):
+    
+#     images = [item['image'] for item in batch]
+#     targets = [item['target'] for item in batch]
+    
+#     return images, targets
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data_dir', type=str, required=True)
+    parser.add_argument('--data_dir', type=str)
     parser.add_argument('--output_dir', type=str, default='outputs')
-    parser.add_argument('--num_classes', type=int, required=True)
+    parser.add_argument('--num_classes', type=int)
     parser.add_argument('--pre_trained', type=bool, default=True)
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--epochs', type=int, default=100)
@@ -171,9 +207,12 @@ if __name__ == "__main__":
     model.to(device)
     params = [p for p in model.parameters() if p.requires_grad]
 
-    train_dataset = CustomImageDataset()
-    valid_dataset = CustomImageDataset()
-    
+    #train_dataset = CustomImageDataset()
+    #valid_dataset = CustomImageDataset()
+
+    train_dataset = VOCDetection(root='./data', year='2012', image_set='train',download=True, transforms = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=torch.float32, scale=True), v2.Resize((608, 1024))]))
+    valid_dataset = VOCDetection(root='./data', year='2012', image_set='val',download=True, transforms = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=torch.float32, scale=True), v2.Resize((608, 1024))]))
+
     train_dataloder = DataLoader(dataset=train_dataset, batch_size=train_batch_size, shuffle=True, collate_fn=collate_fn)
     valid_dataloder = DataLoader(dataset=valid_dataset, batch_size=valid_batch_size, shuffle=False, collate_fn=collate_fn)
 
@@ -195,14 +234,15 @@ if __name__ == "__main__":
         loss_history['train']['cls_loss'].append(train_losses['cls_loss'])
         loss_history['train']['reg_loss'].append(train_losses['breg_loss'])
 
-        valid_losses = eval_loop(model=model, dataloder=valid_dataloder, device=device)
+        valid_losses, valid_eval = valid_loop(model=model, dataloder=valid_dataloder, device=device)
         loss_history['valid']['total_loss'].append(valid_losses['sum_loss'])
         loss_history['valid']['cls_loss'].append(valid_losses['cls_loss'])
         loss_history['valid']['reg_loss'].append(valid_losses['breg_loss'])
 
         print(f'Epoch {epoch+1}/{max_epochs}----------------------------------\n'
               f'Train Loss | Total Loss: {train_losses['total']:.4f} Cls Loss: {train_losses['classification']:.4f} Breg Loss: {train_losses['regression']:.4f}\n'
-              f'Valid Loss | Total Loss: {valid_losses['total']:.4f} Cls Loss: {valid_losses['classification']:.4f} Breg Loss: {valid_losses['regression']:.4f}')
+              f'Valid Loss | Total Loss: {valid_losses['total']:.4f} Cls Loss: {valid_losses['classification']:.4f} Breg Loss: {valid_losses['regression']:.4f}\n')
+        print(valid_eval)
 
         if valid_losses['total'] < best_valid_loss:
             best_valid_loss = valid_losses['total']
