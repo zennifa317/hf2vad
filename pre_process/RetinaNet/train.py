@@ -18,26 +18,7 @@ class_dict = {'aeroplane':1, 'bicycle':2, 'bird':3, 'boat':4, 'bottle':5,
               'diningtable':11, 'dog':12, 'horse':13, 'motorbike':14, 'person':15,
               'pottedplant':16, 'sheep':17, 'sofa':18, 'train':19, 'tvmonitor':20}
 
-def cal_loss(model, images, targets, device):
-    images = [ t.to(device) for t in images]
-    #targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels']} for d in targets ]
-    targets_list = []
-
-    for d in targets:
-        boxes = []
-        labels = []
-        for e in d['annotation']['object']:
-            box = torch.tensor(list(map(int, (e['bndbox']['xmin'],e['bndbox']['ymin'],e['bndbox']['xmax'],e['bndbox']['ymax']))))
-            label = torch.tensor([class_dict[e['name']]])
-            boxes.append(box)
-            labels.append(label)
-
-        tensor_boxes = torch.stack(boxes, dim=0)
-        tensor_labels = torch.cat(labels, dim=0)
-        targets_list.append({'boxes':tensor_boxes, 'labels':tensor_labels})
-    
-    targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels'].to(device)} for d in targets_list]
-
+def cal_loss(model, images, targets):
     losses = model(images=images, targets=targets)
     cls_loss = losses['classification']
     breg_loss = losses['bbox_regression']
@@ -50,7 +31,26 @@ def train_loop(model, dataloder, device, optimizer):
     epoch_losses = {'total': 0.0, 'classification': 0.0, 'regression': 0.0}
 
     for images, targets in tqdm(dataloder):
-        sum_loss, cls_loss, breg_loss = cal_loss(model, images, targets, device)
+        images = [ t.to(device) for t in images]
+        #targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels']} for d in targets ]
+        targets_list = []
+
+        for d in targets:
+            boxes = []
+            labels = []
+            for e in d['annotation']['object']:
+                box = torch.tensor(list(map(int, (e['bndbox']['xmin'],e['bndbox']['ymin'],e['bndbox']['xmax'],e['bndbox']['ymax']))))
+                label = torch.tensor([class_dict[e['name']]])
+                boxes.append(box)
+                labels.append(label)
+
+            tensor_boxes = torch.stack(boxes, dim=0)
+            tensor_labels = torch.cat(labels, dim=0)
+            targets_list.append({'boxes':tensor_boxes, 'labels':tensor_labels})
+    
+        targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels'].to(device)} for d in targets_list]
+
+        sum_loss, cls_loss, breg_loss = cal_loss(model, images, targets)
 
         optimizer.zero_grad()
         sum_loss.backward()
@@ -72,13 +72,32 @@ def valid_loop(model, dataloder, device):
 
     with torch.no_grad():
         for images, targets in tqdm(dataloder):
+            images = [ t.to(device) for t in images]
+            #targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels']} for d in targets ]
+            targets_list = []
+
+            for d in targets:
+                boxes = []
+                labels = []
+                for e in d['annotation']['object']:
+                    box = torch.tensor(list(map(int, (e['bndbox']['xmin'],e['bndbox']['ymin'],e['bndbox']['xmax'],e['bndbox']['ymax']))))
+                    label = torch.tensor([class_dict[e['name']]])
+                    boxes.append(box)
+                    labels.append(label)
+
+                tensor_boxes = torch.stack(boxes, dim=0)
+                tensor_labels = torch.cat(labels, dim=0)
+                targets_list.append({'boxes':tensor_boxes, 'labels':tensor_labels})
+    
+            targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels'].to(device)} for d in targets_list]
+
             model.train()
-            sum_loss, cls_loss, breg_loss = cal_loss(model, images, targets, device)
+            sum_loss, cls_loss, breg_loss = cal_loss(model, images, targets)
 
             epoch_losses['total'] += sum_loss
             epoch_losses['classification'] += cls_loss
             epoch_losses['regression'] += breg_loss
-
+            
             model.eval()
             images = [t.to(device) for t in images]
             preds = model(images)
@@ -109,8 +128,8 @@ def plot_result(output_dir, max_epochs, loss_history):
     total_loss.set_ylabel('Loss')
     total_loss.legend()
 
-    train_cls_loss = loss_history['train']['classification_loss']
-    valid_cls_loss = loss_history['valid']['classification_loss']
+    train_cls_loss = loss_history['train']['classification']
+    valid_cls_loss = loss_history['valid']['classification']
     cls_loss.plot(train_cls_loss, y, label='Train')
     cls_loss.plot(valid_cls_loss, y, label='Valid')
     cls_loss.set_title('Classification Loss')
@@ -118,8 +137,8 @@ def plot_result(output_dir, max_epochs, loss_history):
     cls_loss.set_ylabel('Loss')
     cls_loss.legend()
 
-    train_breg_loss = loss_history['train']['regression_loss']
-    valid_breg_loss = loss_history['valid']['regression_loss']
+    train_breg_loss = loss_history['train']['regression']
+    valid_breg_loss = loss_history['valid']['regression']
     breg_loss.plot(train_breg_loss, y, label='Train')
     breg_loss.plot(valid_breg_loss, y, label='Valid')
     breg_loss.set_title('Bounding Box Regression Loss')
@@ -222,26 +241,26 @@ if __name__ == "__main__":
         optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
     loss_history = {
-    'train': {'total_loss': [], 'classification_loss': [], 'regression_loss': []},
-    'valid': {'total_loss': [], 'classification_loss': [], 'regression_loss': []}
+    'train': {'total_loss': [], 'classification': [], 'regression': []},
+    'valid': {'total_loss': [], 'classification': [], 'regression': []}
     }
 
     best_valid_loss = float('inf')
 
     for epoch in range(max_epochs):
         train_losses = train_loop(model=model, dataloder=train_dataloder, device=device, optimizer=optimizer)
-        loss_history['train']['total_loss'].append(train_losses['sum_loss'])
-        loss_history['train']['cls_loss'].append(train_losses['cls_loss'])
-        loss_history['train']['reg_loss'].append(train_losses['breg_loss'])
+        loss_history['train']['total_loss'].append(train_losses['total'])
+        loss_history['train']['classification'].append(train_losses['classification'])
+        loss_history['train']['regression'].append(train_losses['regression'])
 
         valid_losses, valid_eval = valid_loop(model=model, dataloder=valid_dataloder, device=device)
-        loss_history['valid']['total_loss'].append(valid_losses['sum_loss'])
-        loss_history['valid']['cls_loss'].append(valid_losses['cls_loss'])
-        loss_history['valid']['reg_loss'].append(valid_losses['breg_loss'])
+        loss_history['valid']['total_loss'].append(valid_losses['total'])
+        loss_history['valid']['classification'].append(valid_losses['classification'])
+        loss_history['valid']['regression'].append(valid_losses['regression'])
 
         print(f'Epoch {epoch+1}/{max_epochs}----------------------------------\n'
-              f'Train Loss | Total Loss: {train_losses['total']:.4f} Cls Loss: {train_losses['classification']:.4f} Breg Loss: {train_losses['regression']:.4f}\n'
-              f'Valid Loss | Total Loss: {valid_losses['total']:.4f} Cls Loss: {valid_losses['classification']:.4f} Breg Loss: {valid_losses['regression']:.4f}\n')
+              f"Train Loss | Total Loss: {train_losses['total']:.4f} Cls Loss: {train_losses['classification']:.4f} Breg Loss: {train_losses['regression']:.4f}\n"
+              f"Valid Loss | Total Loss: {valid_losses['total']:.4f} Cls Loss: {valid_losses['classification']:.4f} Breg Loss: {valid_losses['regression']:.4f}\n")
         print(valid_eval)
 
         if valid_losses['total'] < best_valid_loss:
