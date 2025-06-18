@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 
 import torch
@@ -26,7 +27,7 @@ def cal_loss(model, images, targets):
 
     return sum_loss, cls_loss, breg_loss
 
-def train_loop(model, dataloder, device, optimizer):
+def train_loop(model, dataloder, device, optimizer, dict_labels):
     model.train()
     epoch_losses = {'total': 0.0, 'cls': 0.0, 'b_reg': 0.0}
 
@@ -40,7 +41,7 @@ def train_loop(model, dataloder, device, optimizer):
             labels = []
             for e in d['annotation']['object']:
                 box = torch.tensor(list(map(int, (e['bndbox']['xmin'],e['bndbox']['ymin'],e['bndbox']['xmax'],e['bndbox']['ymax']))))
-                label = torch.tensor([class_dict[e['name']]])
+                label = torch.tensor([dict_labels[e['name']]])
                 boxes.append(box)
                 labels.append(label)
 
@@ -66,9 +67,8 @@ def train_loop(model, dataloder, device, optimizer):
     
     return epoch_losses
 
-def valid_loop(model, dataloder, device):
+def valid_loop(model, dataloder, device, dict_labels):
     epoch_losses = {'total': 0.0, 'cls': 0.0, 'b_reg': 0.0}
-    #metric = MeanAveragePrecision(iou_type="bbox", extended_summary=True)
 
     with torch.no_grad():
         for images, targets in tqdm(dataloder):
@@ -81,7 +81,7 @@ def valid_loop(model, dataloder, device):
                 labels = []
                 for e in d['annotation']['object']:
                     box = torch.tensor(list(map(int, (e['bndbox']['xmin'],e['bndbox']['ymin'],e['bndbox']['xmax'],e['bndbox']['ymax']))))
-                    label = torch.tensor([class_dict[e['name']]])
+                    label = torch.tensor([dict_labels[e['name']]])
                     boxes.append(box)
                     labels.append(label)
 
@@ -98,16 +98,10 @@ def valid_loop(model, dataloder, device):
             epoch_losses['cls'] += cls_loss.item()
             epoch_losses['b_reg'] += breg_loss.item()
             
-            '''model.eval()
-            images = [t.to(device) for t in images]
-            preds = model(images)
-            metric.update(preds, targets)'''
-    
     steps = len(dataloder)
     for k in epoch_losses.keys():
         epoch_losses[k] /= steps
 
-    #valid_eval = metric.compute()
     valid_eval = 0
     
     return epoch_losses, valid_eval
@@ -178,6 +172,7 @@ if __name__ == "__main__":
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--freeze_backbone', action='store_true')
+    parser.add_argument('--labels', default='./coco_labels.json')
 
     args = parser.parse_args()
 
@@ -194,9 +189,14 @@ if __name__ == "__main__":
     momentum = args.momentum
     weight_decay = args.weight_decay
     fb = args.freeze_backbone
+    labels_path = args.labels
 
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
+
+    #with open(labels_path, mode='r') as f:
+    #    dict_labels = json.load(f)
+    dict_labels = class_dict
 
     if device == 'cuda' and not torch.cuda.is_available():
         device = 'cpu'
