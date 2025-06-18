@@ -56,9 +56,9 @@ def train_loop(model, dataloder, device, optimizer):
         sum_loss.backward()
         optimizer.step()
 
-        epoch_losses['total'] += sum_loss
-        epoch_losses['cls'] += cls_loss
-        epoch_losses['b_reg'] += breg_loss
+        epoch_losses['total'] += sum_loss.item()
+        epoch_losses['cls'] += cls_loss.item()
+        epoch_losses['b_reg'] += breg_loss.item()
     
     steps = len(dataloder)
     for k in epoch_losses.keys():
@@ -68,7 +68,7 @@ def train_loop(model, dataloder, device, optimizer):
 
 def valid_loop(model, dataloder, device):
     epoch_losses = {'total': 0.0, 'cls': 0.0, 'b_reg': 0.0}
-    metric = MeanAveragePrecision(iou_type="bbox", extended_summary=True)
+    #metric = MeanAveragePrecision(iou_type="bbox", extended_summary=True)
 
     with torch.no_grad():
         for images, targets in tqdm(dataloder):
@@ -94,59 +94,63 @@ def valid_loop(model, dataloder, device):
             model.train()
             sum_loss, cls_loss, breg_loss = cal_loss(model, images, targets)
 
-            epoch_losses['total'] += sum_loss
-            epoch_losses['cls'] += cls_loss
-            epoch_losses['b_reg'] += breg_loss
+            epoch_losses['total'] += sum_loss.item()
+            epoch_losses['cls'] += cls_loss.item()
+            epoch_losses['b_reg'] += breg_loss.item()
             
-            model.eval()
+            '''model.eval()
             images = [t.to(device) for t in images]
             preds = model(images)
-            metric.update(preds, targets)
+            metric.update(preds, targets)'''
     
     steps = len(dataloder)
     for k in epoch_losses.keys():
         epoch_losses[k] /= steps
 
-    valid_eval = metric.compute()
+    #valid_eval = metric.compute()
+    valid_eval = 0
     
     return epoch_losses, valid_eval
 
 def plot_result(output_dir, max_epochs, loss_history):
-    fig = plt.figure()
-    total_loss = fig.add_subplot(1, 3, 1)
-    cls_loss = fig.add_subplot(1, 3, 2)
-    breg_loss = fig.add_subplot(1, 3, 3)
+    total_fig = plt.figure()
+    cls_fig = plt.figure()
+    breg_fig = plt.figure()
+    total_loss = total_fig.add_subplot()
+    cls_loss = cls_fig.add_subplot()
+    breg_loss = breg_fig.add_subplot()
 
-    y = range(1, max_epochs+1)
+    x = range(1, max_epochs+1)
 
     train_total_loss = loss_history['train']['total']
     valid_total_loss = loss_history['valid']['total']
-    total_loss.plot(train_total_loss, y, label='Train')
-    total_loss.plot(valid_total_loss, y, label='Valid')
+    total_loss.plot(x, train_total_loss, label='Train')
+    total_loss.plot(x, valid_total_loss, label='Valid')
     total_loss.set_title('Total Loss')
     total_loss.set_xlabel('Epochs')
     total_loss.set_ylabel('Loss')
     total_loss.legend()
+    total_fig.savefig(os.path.join(output_dir, "Total_Losses.png"))
 
     train_cls_loss = loss_history['train']['cls']
     valid_cls_loss = loss_history['valid']['cls']
-    cls_loss.plot(train_cls_loss, y, label='Train')
-    cls_loss.plot(valid_cls_loss, y, label='Valid')
+    cls_loss.plot(x, train_cls_loss, label='Train')
+    cls_loss.plot(x, valid_cls_loss, label='Valid')
     cls_loss.set_title('Classification Loss')
     cls_loss.set_xlabel('Epochs')
     cls_loss.set_ylabel('Loss')
     cls_loss.legend()
+    cls_fig.savefig(os.path.join(output_dir, "Class_Losses.png"))
 
     train_breg_loss = loss_history['train']['b_reg']
     valid_breg_loss = loss_history['valid']['b_reg']
-    breg_loss.plot(train_breg_loss, y, label='Train')
-    breg_loss.plot(valid_breg_loss, y, label='Valid')
-    breg_loss.set_title('Bounding Box Regression Loss')
+    breg_loss.plot(x, train_breg_loss, label='Train')
+    breg_loss.plot(x, valid_breg_loss, label='Valid')
+    breg_loss.set_title('Regression Loss')
     breg_loss.set_xlabel('Epochs')
     breg_loss.set_ylabel('Loss')
     breg_loss.legend()
-
-    plt.savefig(os.path.join(output_dir, "Losses.png"))
+    breg_fig.savefig(os.path.join(output_dir, "Regression_Losses.png"))
 
 def collate_fn(batch):
     return tuple(zip(*batch))
