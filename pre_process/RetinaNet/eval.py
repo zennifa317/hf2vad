@@ -9,11 +9,11 @@ from tqdm import tqdm
 
 from dataset import CustomImageDataset
 
-def test(model, dataloder, device, class_dict):
+def test(model, dataloader, device, class_dict):
     metric = MeanAveragePrecision(iou_type="bbox", extended_summary=True)
 
     with torch.no_grad(): 
-        for images, targets in tqdm(dataloder):
+        for images, targets in tqdm(dataloader):
             images = [ t.to(device) for t in images]
             #targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels']} for d in targets ]
             targets_list = []
