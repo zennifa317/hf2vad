@@ -27,11 +27,11 @@ def cal_loss(model, images, targets):
 
     return sum_loss, cls_loss, breg_loss
 
-def train_loop(model, dataloder, device, optimizer, dict_labels):
+def train_loop(model, dataloader, device, optimizer, dict_labels):
     model.train()
     epoch_losses = {'total': 0.0, 'cls': 0.0, 'b_reg': 0.0}
 
-    for images, targets in tqdm(dataloder):
+    for images, targets in tqdm(dataloader):
         images = [ t.to(device) for t in images]
         #targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels']} for d in targets ]
         targets_list = []
@@ -60,18 +60,19 @@ def train_loop(model, dataloder, device, optimizer, dict_labels):
         epoch_losses['total'] += sum_loss.item()
         epoch_losses['cls'] += cls_loss.item()
         epoch_losses['b_reg'] += breg_loss.item()
-    
-    steps = len(dataloder)
+
+    steps = len(dataloader)
     for k in epoch_losses.keys():
         epoch_losses[k] /= steps
     
     return epoch_losses
 
-def valid_loop(model, dataloder, device, dict_labels):
+def valid_loop(model, dataloader, device, dict_labels):
     epoch_losses = {'total': 0.0, 'cls': 0.0, 'b_reg': 0.0}
+    metric = MeanAveragePrecision(iou_type="bbox", extended_summary=True)
 
     with torch.no_grad():
-        for images, targets in tqdm(dataloder):
+        for images, targets in tqdm(dataloader):
             images = [ t.to(device) for t in images]
             #targets = [{'boxes':d['boxes'].to(device), 'labels':d['labels']} for d in targets ]
             targets_list = []
@@ -97,13 +98,17 @@ def valid_loop(model, dataloder, device, dict_labels):
             epoch_losses['total'] += sum_loss.item()
             epoch_losses['cls'] += cls_loss.item()
             epoch_losses['b_reg'] += breg_loss.item()
-            
-    steps = len(dataloder)
+
+            model.eval()
+            preds = model(images)
+            metric.update(preds, targets)
+
+    steps = len(dataloader)
     for k in epoch_losses.keys():
         epoch_losses[k] /= steps
 
-    valid_eval = 0
-    
+    valid_eval = metric.compute()
+
     return epoch_losses, valid_eval
 
 def plot_result(output_dir, max_epochs, loss_history):
@@ -252,18 +257,24 @@ if __name__ == "__main__":
     best_valid_loss = float('inf')
 
     for epoch in range(max_epochs):
-        train_losses = train_loop(model=model, dataloder=train_dataloder, device=device, optimizer=optimizer)
-        train_total_loss = train_losses['total'].to('cpu').detach().numpy().copy()
-        train_cls_loss = train_losses['cls'].to('cpu').detach().numpy().copy()
-        train_reg_loss = train_losses['b_reg'].to('cpu').detach().numpy().copy()
+        train_losses = train_loop(model=model, dataloader=train_dataloder, device=device, optimizer=optimizer, dict_labels=dict_labels)
+        #train_total_loss = train_losses['total'].to('cpu').detach().numpy().copy()
+        #train_cls_loss = train_losses['cls'].to('cpu').detach().numpy().copy()
+        #train_reg_loss = train_losses['b_reg'].to('cpu').detach().numpy().copy()
+        train_total_loss = train_losses['total']
+        train_cls_loss = train_losses['cls']
+        train_reg_loss = train_losses['b_reg']
         loss_history['train']['total'].append(train_total_loss)
         loss_history['train']['cls'].append(train_cls_loss)
         loss_history['train']['b_reg'].append(train_reg_loss)
 
-        valid_losses, valid_eval = valid_loop(model=model, dataloder=valid_dataloder, device=device)
-        valid_total_loss = valid_losses['total'].to('cpu').detach().numpy().copy()
-        valid_cls_loss = valid_losses['cls'].to('cpu').detach().numpy().copy()
-        valid_reg_loss = valid_losses['b_reg'].to('cpu').detach().numpy().copy()
+        valid_losses, valid_eval = valid_loop(model=model, dataloader=valid_dataloder, device=device, dict_labels=dict_labels)
+        #valid_total_loss = valid_losses['total'].to('cpu').detach().numpy().copy()
+        #valid_cls_loss = valid_losses['cls'].to('cpu').detach().numpy().copy()
+        #valid_reg_loss = valid_losses['b_reg'].to('cpu').detach().numpy().copy()
+        valid_total_loss = valid_losses['total']
+        valid_cls_loss = valid_losses['cls']
+        valid_reg_loss = valid_losses['b_reg']
         loss_history['valid']['total'].append(valid_total_loss)
         loss_history['valid']['cls'].append(valid_cls_loss)
         loss_history['valid']['b_reg'].append(valid_reg_loss)
@@ -271,7 +282,7 @@ if __name__ == "__main__":
         print(f'Epoch {epoch+1}/{max_epochs}----------------------------------\n'
               f"Train Loss | Total Loss: {train_total_loss:.4f} Cls Loss: {train_cls_loss:.4f} Breg Loss: {train_reg_loss:.4f}\n"
               f"Valid Loss | Total Loss: {valid_total_loss:.4f} Cls Loss: {valid_cls_loss:.4f} Breg Loss: {valid_reg_loss:.4f}\n")
-        #print(valid_eval)
+        print(valid_eval)
 
         if valid_total_loss < best_valid_loss:
             best_valid_loss = valid_total_loss
