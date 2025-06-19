@@ -41,6 +41,13 @@ def test(model, dataloder, device, class_dict):
     
     return valid_eval
 
+def save_results(perf, output_dir):
+        import os
+        import json
+        os.makedirs(output_dir, exist_ok=True)
+        with open(os.path.join(output_dir, 'eval_results.json'), 'w') as f:
+            json.dump(perf, f, indent=4)
+
 def collate_fn(batch): 
     images = [item['image'] for item in batch]
     targets = [item['target'] for item in batch]
@@ -89,5 +96,7 @@ if __name__ == '__main__':
     test_dataset = CustomImageDataset()
     test_dataloder = DataLoader(dataset=test_dataset, batch_size=test_batch_size, shuffle=True, collate_fn=collate_fn)
 
-    perf = test(model=model, dataloder=test_dataset, device=device, class_dict=dict_labels)
-    print(perf)
+    perf = test(model=model, dataloder=test_dataloder, device=device, class_dict=dict_labels)
+    print(perf)    
+    
+    save_results(perf, output_dir)
