@@ -19,6 +19,8 @@ class_dict = {'aeroplane':1, 'bicycle':2, 'bird':3, 'boat':4, 'bottle':5,
               'diningtable':11, 'dog':12, 'horse':13, 'motorbike':14, 'person':15,
               'pottedplant':16, 'sheep':17, 'sofa':18, 'train':19, 'tvmonitor':20}
 
+iou_thresholds = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+
 def cal_loss(model, images, targets):
     losses = model(images=images, targets=targets)
     cls_loss = losses['classification']
@@ -69,7 +71,7 @@ def train_loop(model, dataloader, device, optimizer, dict_labels):
 
 def valid_loop(model, dataloader, device, dict_labels):
     epoch_losses = {'total': 0.0, 'cls': 0.0, 'b_reg': 0.0}
-    metric = MeanAveragePrecision(iou_type="bbox", extended_summary=True)
+    metric = MeanAveragePrecision(iou_type="bbox", extended_summary=True, iou_thresholds=iou_thresholds, max_detection_thresholds=[1, 10, 100])
 
     with torch.no_grad():
         for images, targets in tqdm(dataloader):
