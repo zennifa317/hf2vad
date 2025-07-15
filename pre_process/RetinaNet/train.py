@@ -14,10 +14,12 @@ from dataset import CustomImageDataset
 from torchvision.datasets import VOCDetection
 from torchvision.transforms import v2
 
-class_dict = {'aeroplane':1, 'bicycle':2, 'bird':3, 'boat':4, 'bottle':5,
-              'bus':6, 'car':7, 'cat': 8, 'chair':9, 'cow':10, 
-              'diningtable':11, 'dog':12, 'horse':13, 'motorbike':14, 'person':15,
-              'pottedplant':16, 'sheep':17, 'sofa':18, 'train':19, 'tvmonitor':20}
+class_dict = {
+    'aeroplane': 1, 'bicycle': 2, 'bird': 3, 'boat': 4, 'bottle': 5,
+    'bus': 6, 'car': 7, 'cat': 8, 'chair': 9, 'cow': 10,
+    'diningtable': 11, 'dog': 12, 'horse': 13, 'motorbike': 14, 'person': 15,
+    'pottedplant': 16, 'sheep': 17, 'sofa': 18, 'train': 19, 'tvmonitor': 20
+}
 
 iou_thresholds = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
 
@@ -220,7 +222,8 @@ if __name__ == "__main__":
         new_cls_logits = torch.nn.Conv2d(in_channels, num_anchors * num_classes, kernel_size=3, stride=1, padding=1)
 
         torch.nn.init.normal_(new_cls_logits.weight, std=0.01)
-        torch.nn.init.constant_(new_cls_logits.bias, -4.595) # -log((1 - 0.01) / 0.01)
+        if new_cls_logits.bias is not None:
+            torch.nn.init.constant_(new_cls_logits.bias, -4.595) # -log((1 - 0.01) / 0.01)
 
         model.head.classification_head.cls_logits = new_cls_logits
         model.head.classification_head.num_classes = num_classes
@@ -250,6 +253,8 @@ if __name__ == "__main__":
         optimizer = torch.optim.SGD(params, lr=lr, momentum=momentum, weight_decay=weight_decay)
     elif optimizer_type == 'Adamw':
         optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
+    else:
+        raise ValueError(f"Unsupported optimizer type: {optimizer_type}")
 
     loss_history = {
     'train': {'total': [], 'cls': [], 'b_reg': []},
@@ -260,9 +265,6 @@ if __name__ == "__main__":
 
     for epoch in range(max_epochs):
         train_losses = train_loop(model=model, dataloader=train_dataloder, device=device, optimizer=optimizer, dict_labels=dict_labels)
-        #train_total_loss = train_losses['total'].to('cpu').detach().numpy().copy()
-        #train_cls_loss = train_losses['cls'].to('cpu').detach().numpy().copy()
-        #train_reg_loss = train_losses['b_reg'].to('cpu').detach().numpy().copy()
         train_total_loss = train_losses['total']
         train_cls_loss = train_losses['cls']
         train_reg_loss = train_losses['b_reg']
@@ -271,9 +273,6 @@ if __name__ == "__main__":
         loss_history['train']['b_reg'].append(train_reg_loss)
 
         valid_losses, valid_eval = valid_loop(model=model, dataloader=valid_dataloder, device=device, dict_labels=dict_labels)
-        #valid_total_loss = valid_losses['total'].to('cpu').detach().numpy().copy()
-        #valid_cls_loss = valid_losses['cls'].to('cpu').detach().numpy().copy()
-        #valid_reg_loss = valid_losses['b_reg'].to('cpu').detach().numpy().copy()
         valid_total_loss = valid_losses['total']
         valid_cls_loss = valid_losses['cls']
         valid_reg_loss = valid_losses['b_reg']
@@ -281,9 +280,11 @@ if __name__ == "__main__":
         loss_history['valid']['cls'].append(valid_cls_loss)
         loss_history['valid']['b_reg'].append(valid_reg_loss)
 
-        print(f'Epoch {epoch+1}/{max_epochs}----------------------------------\n'
-              f"Train Loss | Total Loss: {train_total_loss:.4f} Cls Loss: {train_cls_loss:.4f} Breg Loss: {train_reg_loss:.4f}\n"
-              f"Valid Loss | Total Loss: {valid_total_loss:.4f} Cls Loss: {valid_cls_loss:.4f} Breg Loss: {valid_reg_loss:.4f}\n")
+        print(
+            f'Epoch {epoch+1}/{max_epochs}----------------------------------\n'
+            f"Train Loss | Total Loss: {train_total_loss:.4f} Cls Loss: {train_cls_loss:.4f} Breg Loss: {train_reg_loss:.4f}\n"
+            f"Valid Loss | Total Loss: {valid_total_loss:.4f} Cls Loss: {valid_cls_loss:.4f} Breg Loss: {valid_reg_loss:.4f}\n"
+        )
         print(valid_eval)
 
         if valid_total_loss < best_valid_loss:

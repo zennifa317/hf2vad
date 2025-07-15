@@ -6,10 +6,10 @@ from torchvision.io import decode_image
 from torchvision.transforms import v2
 
 class CustomImageDataset(Dataset):
-    def __init__(self, root_dir, transforms):
+    def __init__(self, root_dir, transforms=None):
         self.root_dir = root_dir
 
-        self.transfroms = transforms
+        self.transforms = transforms
 
         self.data_points = self._find_data_points()
     
@@ -23,8 +23,8 @@ class CustomImageDataset(Dataset):
         image = decode_image(image_path)
         target = self._parse_annotation(data_point)
 
-        if self.transform:
-            image, target = self.transform(image, target)
+        if self.transforms:
+            image, target = self.transforms(image, target)
 
         data_point = {'image':image, 'target': target}
 
@@ -60,10 +60,10 @@ class CustomImageDataset(Dataset):
                 continue
 
             label_name = os.path.splitext(img_name)[0] + self._get_label_extension()
-            label_path = os.path.join(self.label_dir, label_name)
+            label_path = os.path.join(label_dir, label_name)
             
             if os.path.exists(label_path):
-                image_path = os.path.join(self.image_dir, img_name)
+                image_path = os.path.join(image_dir, img_name)
                 data_points.append({'image_path': image_path, 'label_path': label_path})
             else:
                 print(f"⚠️ 警告: アノテーションファイルが見つかりません。スキップします: {label_path}")
